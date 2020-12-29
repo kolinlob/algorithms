@@ -23,6 +23,7 @@ public class BaseballElimination {
     public BaseballElimination(String filename) {
         In file = new In(filename);
         int divisionSize = Integer.parseInt(file.readLine());
+
         division = new HashMap<>();
         eliminations = new HashMap<>();
         teams = new String[divisionSize];
@@ -133,9 +134,12 @@ public class BaseballElimination {
 
     private boolean nonTrivially(String team) {
         int teamsCount = division.size() - 1;
-        int games = (int) choose(division.size() - 1, 2);
+        int gamesCount = choose2(division.size() - 1);
 
-        FlowNetwork network = new FlowNetwork(2 + games + teamsCount);
+        FlowNetwork network = new FlowNetwork(2 + gamesCount + teamsCount);
+        int source = 0;
+        int sink = network.V() - 1;
+
         Standing x = division.get(team);
 
         int vc = 1;
@@ -149,38 +153,34 @@ public class BaseballElimination {
                 if (j == x.index || j >= i.index)
                     continue;
 
-                network.addEdge(new FlowEdge(0, vc, i.remainingGames[j]));
+                network.addEdge(new FlowEdge(source, vc, i.remainingGames[j]));
 
-                int t1 = 1 + games + (i.index > x.index ? i.index - 1 : i.index);
-                int t2 = 1 + games + (j > x.index ? j - 1 : j);
+                int t1 = 1 + gamesCount + (i.index > x.index ? i.index - 1 : i.index);
                 network.addEdge(new FlowEdge(vc, t1, Double.POSITIVE_INFINITY));
+
+                int t2 = 1 + gamesCount + (j > x.index ? j - 1 : j);
                 network.addEdge(new FlowEdge(vc, t2, Double.POSITIVE_INFINITY));
                 vc++;
             }
 
-            network.addEdge(new FlowEdge(1 + games + tc,
-                                         network.V() - 1,
-                                         x.wins + x.remained - i.wins));
+            network.addEdge(new FlowEdge(1 + gamesCount + tc, sink, x.wins + x.remained - i.wins));
             tc++;
         }
 
         FordFulkerson flow = new FordFulkerson(network, 0, network.V() - 1);
         boolean result = false;
 
-        for (FlowEdge e : network.adj(0))
+        for (FlowEdge e : network.adj(source))
             if (e.capacity() > e.flow())
                 result = true;
 
-        if (result) {
-            for (FlowEdge e : network.adj(network.V() - 1)) {
+        if (result)
+            for (FlowEdge e : network.adj(sink))
                 if (flow.inCut(e.from())) {
-                    int ix = (e.from() - games) > division.get(team).index
-                             ? e.from() - games
-                             : e.from() - games - 1;
-                    addEliminationCert(team, teams[ix]);
+                    int ix = e.from() - gamesCount;
+                    int index = ix > division.get(team).index ? ix : ix - 1;
+                    addEliminationCert(team, teams[index]);
                 }
-            }
-        }
 
         return result;
     }
@@ -195,17 +195,8 @@ public class BaseballElimination {
         }
     }
 
-    private long choose(long n, long k) {
-        long numerator = 1;
-        long denominator = 1;
-
-        for (long i = n; i >= (n - k + 1); i--)
-            numerator *= i;
-
-        for (long i = k; i >= 1; i--)
-            denominator *= i;
-
-        return (numerator / denominator);
+    private int choose2(int n) {
+        return n * (n - 1) / 2;
     }
 
     private class Standing {
