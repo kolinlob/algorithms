@@ -14,8 +14,6 @@ import edu.princeton.cs.algs4.StdOut;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 public class BaseballElimination {
     private final HashMap<String, Standing> division;
@@ -31,21 +29,20 @@ public class BaseballElimination {
 
         while (!file.isEmpty()) {
             String raw = file.readLine();
-            String[] line = raw.trim().split(" +");
-
-            int[] x = Arrays.stream(Arrays.copyOfRange(line, 1, 4 + divisionSize))
-                            .mapToInt(Integer::parseInt)
-                            .toArray();
-
-            String name = line[0];
-            int wins = x[0];
-            int losses = x[1];
-            int rem = x[2];
-            int[] games = Arrays.copyOfRange(x, 3, 3 + divisionSize);
-
-            teams[division.size()] = name;
-            division.put(name, new Standing(division.size(), wins, losses, rem, games));
+            processInputLine(raw.trim().split(" +"));
         }
+    }
+
+    private void processInputLine(String[] line) {
+        int[] parsed = Arrays.stream(Arrays.copyOfRange(line, 1, line.length))
+                             .mapToInt(Integer::parseInt)
+                             .toArray();
+
+        int[] games = Arrays.copyOfRange(parsed, 3, line.length);
+
+        teams[division.size()] = line[0];
+        division.put(line[0],
+                     new Standing(division.size(), parsed[0], parsed[1], parsed[2], games));
     }
 
     public int numberOfTeams() {
@@ -53,40 +50,27 @@ public class BaseballElimination {
     }
 
     public Iterable<String> teams() {
-        return division.entrySet()
-                       .stream()
-                       .sorted(Map.Entry.comparingByValue())
-                       .map(Map.Entry::getKey)
-                       .collect(Collectors.toList());
+        return Arrays.asList(teams);
     }
 
     public int wins(String team) {
-        if (!division.containsKey(team))
-            throw new IllegalArgumentException("Team " + team + " not found");
-
+        validate(team);
         return division.get(team).wins;
     }
 
     public int losses(String team) {
-        if (!division.containsKey(team))
-            throw new IllegalArgumentException("Team " + team + " not found");
-
+        validate(team);
         return division.get(team).losses;
     }
 
     public int remaining(String team) {
-        if (!division.containsKey(team))
-            throw new IllegalArgumentException("Team " + team + " not found");
-
+        validate(team);
         return division.get(team).remained;
     }
 
     public int against(String team1, String team2) {
-        if (!division.containsKey(team1))
-            throw new IllegalArgumentException("Team 1 " + team1 + " not found");
-
-        if (!division.containsKey(team2))
-            throw new IllegalArgumentException("Team 2 " + team2 + " not found");
+        validate(team1);
+        validate(team2);
 
         Standing standing1 = division.get(team1);
         Standing standing2 = division.get(team2);
@@ -94,22 +78,18 @@ public class BaseballElimination {
     }
 
     public boolean isEliminated(String team) {
-        if (!division.containsKey(team))
-            throw new IllegalArgumentException("Team " + team + " not found");
-
+        validate(team);
         return trivially(team) || nonTrivially(team);
     }
 
     public Iterable<String> certificateOfElimination(String team) {
-        if (!division.containsKey(team))
-            throw new IllegalArgumentException("Team " + team + " not found");
+        validate(team);
 
         if (!eliminations.containsKey(team) && !division.get(team).checked)
             isEliminated(team);
 
         return eliminations.get(team);
     }
-
 
     public static void main(String[] args) {
         BaseballElimination division = new BaseballElimination(args[0]);
@@ -121,14 +101,20 @@ public class BaseballElimination {
                     StdOut.print(t + " ");
                 StdOut.println("}");
             }
-            else
+            else {
                 StdOut.println(team + " is not eliminated");
+            }
         }
+    }
+
+    private void validate(String team) {
+        if (!division.containsKey(team))
+            throw new IllegalArgumentException("Team " + team + " not found");
     }
 
     private boolean trivially(String team) {
         Standing std = division.get(team);
-        std.check();
+        std.markChecked();
 
         int bestChance = std.wins + std.remained;
         boolean result = false;
@@ -164,27 +150,26 @@ public class BaseballElimination {
                     continue;
 
                 network.addEdge(new FlowEdge(0, vc, i.remainingGames[j]));
+
                 int t1 = 1 + games + (i.index > x.index ? i.index - 1 : i.index);
                 int t2 = 1 + games + (j > x.index ? j - 1 : j);
                 network.addEdge(new FlowEdge(vc, t1, Double.POSITIVE_INFINITY));
                 network.addEdge(new FlowEdge(vc, t2, Double.POSITIVE_INFINITY));
-
                 vc++;
             }
 
-            network.addEdge(new FlowEdge(1 + games + tc++,
+            network.addEdge(new FlowEdge(1 + games + tc,
                                          network.V() - 1,
                                          x.wins + x.remained - i.wins));
+            tc++;
         }
 
         FordFulkerson flow = new FordFulkerson(network, 0, network.V() - 1);
         boolean result = false;
 
-        for (FlowEdge e : network.adj(0)) {
-            if (e.capacity() > e.flow()) {
+        for (FlowEdge e : network.adj(0))
+            if (e.capacity() > e.flow())
                 result = true;
-            }
-        }
 
         if (result) {
             for (FlowEdge e : network.adj(network.V() - 1)) {
@@ -223,7 +208,7 @@ public class BaseballElimination {
         return (numerator / denominator);
     }
 
-    private class Standing implements Comparable<Standing> {
+    private class Standing {
         private final int index;
         private final int wins;
         private final int losses;
@@ -239,12 +224,8 @@ public class BaseballElimination {
             this.remainingGames = Arrays.copyOf(games, games.length);
         }
 
-        public void check() {
+        public void markChecked() {
             this.checked = true;
-        }
-
-        public int compareTo(Standing other) {
-            return this.index - other.index;
         }
     }
 }
